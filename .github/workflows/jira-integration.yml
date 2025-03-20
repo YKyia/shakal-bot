@@ -6,6 +6,8 @@ on:
       - main
       - feature/*
       - bugfix/*
+  pull_request:
+    types: [opened]
 
 jobs:
   update-jira:
@@ -18,10 +20,20 @@ jobs:
         id: extract
         run: echo "JIRA_ISSUE=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')" >> $GITHUB_ENV
 
-      - name: Send update to Jira
+      - name: Update Jira Issue Status
         if: env.JIRA_ISSUE != ''
         run: |
           curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ env.JIRA_ISSUE }}/transitions" \
             --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
             --header "Content-Type: application/json" \
             --data '{"transition": {"id": "31"}}'
+
+      - name: Add PR link to Jira Issue
+        if: env.JIRA_ISSUE != '' && github.event_name == 'pull_request'
+        run: |
+          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ env.JIRA_ISSUE }}/comment" \
+            --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data '{
+              "body": "🔗 Pull Request: [${{ github.event.pull_request.html_url }}](${{ github.event.pull_request.html_url }})"
+            }'
