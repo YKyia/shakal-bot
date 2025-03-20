@@ -1,0 +1,27 @@
+name: Update Jira Issue
+
+on:
+  push:
+    branches:
+      - main
+      - feature/*
+      - bugfix/*
+
+jobs:
+  update-jira:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Jira Issue from commit message
+        id: extract
+        run: echo "JIRA_ISSUE=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')" >> $GITHUB_ENV
+
+      - name: Send update to Jira
+        if: env.JIRA_ISSUE != ''
+        run: |
+          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ env.JIRA_ISSUE }}/transitions" \
+            --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data '{"transition": {"id": "31"}}'
