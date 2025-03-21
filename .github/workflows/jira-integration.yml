@@ -24,16 +24,17 @@ jobs:
         id: set-jira
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "issue=$(echo '${{ github.event.pull_request.title }}' | grep -oE '[A-Z]+-[0-9]+')" >> $GITHUB_OUTPUT
+            ISSUE=$(echo '${{ github.event.pull_request.title }}' | grep -oE '[A-Z]+-[0-9]+')
           else
-            echo "issue=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')" >> $GITHUB_OUTPUT
+            ISSUE=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')
           fi
+          echo "issue=$ISSUE" >> $GITHUB_OUTPUT
 
   jira-in-progress:
     name: Mark Jira as In Progress
     runs-on: ubuntu-latest
     needs: extract-jira
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != ''
     steps:
       - name: Set In Progress in Jira
         run: |
@@ -46,7 +47,7 @@ jobs:
     name: Add PR link to Jira
     runs-on: ubuntu-latest
     needs: extract-jira
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != ''
     steps:
       - name: Add comment
         run: |
@@ -61,7 +62,7 @@ jobs:
     name: Mark Jira as Done
     runs-on: ubuntu-latest
     needs: extract-jira
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && needs.extract-jira.outputs.issue != ''
     steps:
       - name: Set Done in Jira
         run: |
@@ -69,21 +70,3 @@ jobs:
             --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
             --header "Content-Type: application/json" \
             --data '{"transition": {"id": "51"}}'
-
-  delete-branch:
-    name: Delete merged branch
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      !startsWith(github.event.pull_request.head.ref, 'main') &&
-      !startsWith(github.event.pull_request.head.ref, 'develop')
-    steps:
-      - name: Delete branch
-        run: |
-          BRANCH=${{ github.event.pull_request.head.ref }}
-          echo "✅ Deleting remote branch: $BRANCH"
-          curl -X DELETE \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/git/refs/heads/$BRANCH
