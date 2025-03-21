@@ -22,13 +22,19 @@ jobs:
 
       - name: Get Jira Issue Key
         id: set-jira
+        shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            ISSUE=$(echo '${{ github.event.pull_request.title }}' | grep -oE '[A-Z]+-[0-9]+')
+            ISSUE=$(echo "${{ github.event.pull_request.title }}" | grep -oE '[A-Z]+-[0-9]+')
           else
             ISSUE=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')
           fi
-          echo "issue=$ISSUE" >> $GITHUB_OUTPUT
+
+          if [[ -n "$ISSUE" ]]; then
+            echo "issue=$ISSUE" >> $GITHUB_OUTPUT
+          else
+            echo "issue=" >> $GITHUB_OUTPUT
+          fi
 
   jira-in-progress:
     name: Mark Jira as In Progress
