@@ -31,16 +31,18 @@ jobs:
           fi
 
           if [[ -n "$ISSUE" ]]; then
+            echo "✅ Jira issue found: $ISSUE"
             echo "issue=$ISSUE" >> $GITHUB_OUTPUT
           else
-            echo "issue=" >> $GITHUB_OUTPUT
+            echo "⚠️ No Jira issue found"
+            echo "issue=none" >> $GITHUB_OUTPUT
           fi
 
   jira-in-progress:
     name: Mark Jira as In Progress
     runs-on: ubuntu-latest
     needs: extract-jira
-    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != ''
+    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != 'none'
     steps:
       - name: Set In Progress in Jira
         run: |
@@ -53,7 +55,7 @@ jobs:
     name: Add PR link to Jira
     runs-on: ubuntu-latest
     needs: extract-jira
-    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != ''
+    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != 'none'
     steps:
       - name: Add comment
         run: |
@@ -68,7 +70,7 @@ jobs:
     name: Mark Jira as Done
     runs-on: ubuntu-latest
     needs: extract-jira
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && needs.extract-jira.outputs.issue != ''
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && needs.extract-jira.outputs.issue != 'none'
     steps:
       - name: Set Done in Jira
         run: |
