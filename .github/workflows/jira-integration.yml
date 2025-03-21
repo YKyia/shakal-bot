@@ -1,4 +1,4 @@
-name: Update Jira Issue
+name: Jira Integration
 
 on:
   push:
@@ -7,33 +7,66 @@ on:
       - feature/*
       - bugfix/*
   pull_request:
-    types: [opened]
+    types: [opened, closed]
 
 jobs:
-  update-jira:
+
+  extract-jira:
+    name: Extract Jira Issue
     runs-on: ubuntu-latest
+    outputs:
+      issue: ${{ steps.set-jira.outputs.issue }}
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract Jira Issue from commit message
-        id: extract
-        run: echo "JIRA_ISSUE=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')" >> $GITHUB_ENV
-
-      - name: Update Jira Issue Status
-        if: env.JIRA_ISSUE != ''
+      - name: Get Jira Issue Key
+        id: set-jira
         run: |
-          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ env.JIRA_ISSUE }}/transitions" \
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ISSUE=$(echo '${{ github.event.pull_request.title }}' | grep -oE '[A-Z]+-[0-9]+')
+          else
+            ISSUE=$(git log -1 --pretty=%B | grep -oE '[A-Z]+-[0-9]+')
+          fi
+          echo "issue=$ISSUE" >> $GITHUB_OUTPUT
+
+  jira-in-progress:
+    name: Mark Jira as In Progress
+    runs-on: ubuntu-latest
+    needs: extract-jira
+    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != ''
+    steps:
+      - name: Set In Progress in Jira
+        run: |
+          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ needs.extract-jira.outputs.issue }}/transitions" \
             --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
             --header "Content-Type: application/json" \
             --data '{"transition": {"id": "31"}}'
 
-      - name: Add PR link to Jira Issue
-        if: env.JIRA_ISSUE != '' && github.event_name == 'pull_request'
+  jira-comment:
+    name: Add PR link to Jira
+    runs-on: ubuntu-latest
+    needs: extract-jira
+    if: github.event_name == 'pull_request' && github.event.action == 'opened' && needs.extract-jira.outputs.issue != ''
+    steps:
+      - name: Add comment
         run: |
-          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ env.JIRA_ISSUE }}/comment" \
+          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ needs.extract-jira.outputs.issue }}/comment" \
             --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
             --header "Content-Type: application/json" \
             --data '{
               "body": "🔗 Pull Request: [${{ github.event.pull_request.html_url }}](${{ github.event.pull_request.html_url }})"
             }'
+
+  jira-done:
+    name: Mark Jira as Done
+    runs-on: ubuntu-latest
+    needs: extract-jira
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && needs.extract-jira.outputs.issue != ''
+    steps:
+      - name: Set Done in Jira
+        run: |
+          curl -X POST "https://shakal-express.atlassian.net/rest/api/3/issue/${{ needs.extract-jira.outputs.issue }}/transitions" \
+            --user "${{ secrets.JIRA_USER }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data '{"transition": {"id": "51"}}'
